@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package udev
@@ -63,8 +64,8 @@ func ExampleEnumerate_Devices() {
 	e := u.NewEnumerate()
 
 	// Add some FilterAddMatchSubsystemDevtype
-	e.AddMatchSubsystem("block")
-	e.AddMatchIsInitialized()
+	_ = e.AddMatchSubsystem("block")
+	_ = e.AddMatchIsInitialized()
 	devices, _ := e.Devices()
 	for i := range devices {
 		device := devices[i]
@@ -75,12 +76,12 @@ func ExampleEnumerate_Devices() {
 func TestEnumerateDevicesWithFilter(t *testing.T) {
 	u := Udev{}
 	e := u.NewEnumerate()
-	e.AddMatchSubsystem("block")
-	e.AddMatchIsInitialized()
-	e.AddNomatchSubsystem("mem")
-	e.AddMatchProperty("ID_TYPE", "disk")
-	e.AddMatchSysattr("partition", "1")
-	e.AddMatchTag("systemd")
+	_ = e.AddMatchSubsystem("block")
+	_ = e.AddMatchIsInitialized()
+	_ = e.AddNomatchSubsystem("mem")
+	_ = e.AddMatchProperty("ID_TYPE", "disk")
+	_ = e.AddMatchSysattr("partition", "1")
+	_ = e.AddMatchTag("systemd")
 	//	e.AddMatchProperty("DEVTYPE", "partition")
 	ds, err := e.Devices()
 	if err != nil || len(ds) == 0 {
