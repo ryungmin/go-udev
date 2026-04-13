@@ -1,4 +1,4 @@
-// +build linux
+//go:build linux
 
 package udev
 
@@ -18,22 +18,30 @@ func ExampleMonitor() {
 	m := u.NewMonitorFromNetlink("udev")
 
 	// Add filters to monitor
-	m.FilterAddMatchSubsystemDevtype("block", "disk")
-	m.FilterAddMatchTag("systemd")
+	_ = m.FilterAddMatchSubsystemDevtype("block", "disk")
+	_ = m.FilterAddMatchTag("systemd")
 
 	// Create a context
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Start monitor goroutine and get receive channel
-	ch, _ := m.DeviceChan(ctx)
+	ch, errCh, _ := m.DeviceChan(ctx)
 
 	// WaitGroup for timers
 	var wg sync.WaitGroup
 	wg.Add(3)
 	go func() {
 		fmt.Println("Started listening on channel")
-		for d := range ch {
-			fmt.Println("Event:", d.Syspath(), d.Action())
+	Loop:
+		for {
+			select {
+			case <-ctx.Done():
+				break Loop
+			case d := <-ch:
+				fmt.Println("Event:", d.Syspath(), d.Action())
+			case e := <-errCh:
+				fmt.Println("Error:", e)
+			}
 		}
 		fmt.Println("Channel closed")
 		wg.Done()
@@ -42,9 +50,9 @@ func ExampleMonitor() {
 		fmt.Println("Starting timer to update filter")
 		<-time.After(2 * time.Second)
 		fmt.Println("Removing filter")
-		m.FilterRemove()
+		_ = m.FilterRemove()
 		fmt.Println("Updating filter")
-		m.FilterUpdate()
+		_ = m.FilterUpdate()
 		wg.Done()
 	}()
 	go func() {
@@ -60,10 +68,10 @@ func ExampleMonitor() {
 func TestMonitorDeviceChan(t *testing.T) {
 	u := Udev{}
 	m := u.NewMonitorFromNetlink("udev")
-	m.FilterAddMatchSubsystemDevtype("block", "disk")
-	m.FilterAddMatchTag("systemd")
+	_ = m.FilterAddMatchSubsystemDevtype("block", "disk")
+	_ = m.FilterAddMatchTag("systemd")
 	ctx, cancel := context.WithCancel(context.Background())
-	ch, e := m.DeviceChan(ctx)
+	ch, errCh, e := m.DeviceChan(ctx)
 	if e != nil {
 		t.Fail()
 	}
@@ -71,8 +79,16 @@ func TestMonitorDeviceChan(t *testing.T) {
 	wg.Add(3)
 	go func() {
 		fmt.Println("Started listening on channel")
-		for d := range ch {
-			fmt.Println(d.Syspath(), d.Action())
+	Loop:
+		for {
+			select {
+			case <-ctx.Done():
+				break Loop
+			case d := <-ch:
+				fmt.Println(d.Syspath(), d.Action())
+			case e := <-errCh:
+				fmt.Println("Error:", e)
+			}
 		}
 		fmt.Println("Channel closed")
 		wg.Done()
@@ -81,9 +97,9 @@ func TestMonitorDeviceChan(t *testing.T) {
 		fmt.Println("Starting timer to update filter")
 		<-time.After(2 * time.Second)
 		fmt.Println("Removing filter")
-		m.FilterRemove()
+		_ = m.FilterRemove()
 		fmt.Println("Updating filter")
-		m.FilterUpdate()
+		_ = m.FilterUpdate()
 		wg.Done()
 	}()
 	go func() {
