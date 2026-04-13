@@ -1,3 +1,4 @@
+//go:build linux && cgo
 // +build linux,cgo
 
 package udev
@@ -10,8 +11,10 @@ package udev
 	#include <linux/kdev_t.h>
 */
 import "C"
-import "errors"
-import "github.com/jkeiser/iter"
+import (
+	"errors"
+	"iter"
+)
 
 // Device wraps a libudev device object
 type Device struct {
@@ -138,24 +141,18 @@ func (d *Device) Devlinks() (r map[string]struct{}) {
 // DevlinkIterator returns an Iterator over the device links pointing to the device file of the udev device.
 // The Iterator is using the github.com/jkeiser/iter package.
 // Values are returned as an interface{} and should be cast to string.
-func (d *Device) DevlinkIterator() iter.Iterator {
+func (d *Device) DevlinkIterator() iter.Seq[string] {
 	d.lock()
 	defer d.unlock()
-	l := C.udev_device_get_devlinks_list_entry(d.ptr)
-	return iter.Iterator{
-		Next: func() (item interface{}, err error) {
-			d.lock()
-			defer d.unlock()
-			if l != nil {
-				item = C.GoString(C.udev_list_entry_get_name(l))
-				l = C.udev_list_entry_get_next(l)
-			} else {
-				err = iter.FINISHED
+
+	return func(yield func(string) bool) {
+		for l := C.udev_device_get_devlinks_list_entry(d.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
+			var item string = C.GoString(C.udev_list_entry_get_name(l))
+
+			if !yield(item) {
+				return
 			}
-			return
-		},
-		Close: func() {
-		},
+		}
 	}
 }
 
@@ -174,27 +171,20 @@ func (d *Device) Properties() (r map[string]string) {
 // The Iterator is using the github.com/jkeiser/iter package.
 // Values are returned as an interface{} and should be cast to []string,
 // which will have length 2 and represent a Key/Value pair.
-func (d *Device) PropertyIterator() iter.Iterator {
+func (d *Device) PropertyIterator() iter.Seq[[]string] {
 	d.lock()
 	defer d.unlock()
-	l := C.udev_device_get_properties_list_entry(d.ptr)
-	return iter.Iterator{
-		Next: func() (item interface{}, err error) {
-			d.lock()
-			defer d.unlock()
-			if l != nil {
-				item = []string{
-					C.GoString(C.udev_list_entry_get_name(l)),
-					C.GoString(C.udev_list_entry_get_value(l)),
-				}
-				l = C.udev_list_entry_get_next(l)
-			} else {
-				err = iter.FINISHED
+
+	return func(yield func([]string) bool) {
+		for l := C.udev_device_get_properties_list_entry(d.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
+			item := []string{
+				C.GoString(C.udev_list_entry_get_name(l)),
+				C.GoString(C.udev_list_entry_get_value(l)),
 			}
-			return
-		},
-		Close: func() {
-		},
+			if !yield(item) {
+				return
+			}
+		}
 	}
 }
 
@@ -212,24 +202,18 @@ func (d *Device) Tags() (r map[string]struct{}) {
 // TagIterator returns an Iterator over the tags attached to the udev device.
 // The Iterator is using the github.com/jkeiser/iter package.
 // Values are returned as an interface{} and should be cast to string.
-func (d *Device) TagIterator() iter.Iterator {
+func (d *Device) TagIterator() iter.Seq[string] {
 	d.lock()
 	defer d.unlock()
-	l := C.udev_device_get_tags_list_entry(d.ptr)
-	return iter.Iterator{
-		Next: func() (item interface{}, err error) {
-			d.lock()
-			defer d.unlock()
-			if l != nil {
-				item = C.GoString(C.udev_list_entry_get_name(l))
-				l = C.udev_list_entry_get_next(l)
-			} else {
-				err = iter.FINISHED
+
+	return func(yield func(string) bool) {
+		for l := C.udev_device_get_tags_list_entry(d.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
+			item := C.GoString(C.udev_list_entry_get_name(l))
+
+			if !yield(item) {
+				return
 			}
-			return
-		},
-		Close: func() {
-		},
+		}
 	}
 }
 
@@ -247,24 +231,18 @@ func (d *Device) Sysattrs() (r map[string]struct{}) {
 // SysattrIterator returns an Iterator over the systems attributes of the udev device.
 // The Iterator is using the github.com/jkeiser/iter package.
 // Values are returned as an interface{} and should be cast to string.
-func (d *Device) SysattrIterator() iter.Iterator {
+func (d *Device) SysattrIterator() iter.Seq[string] {
 	d.lock()
 	defer d.unlock()
-	l := C.udev_device_get_sysattr_list_entry(d.ptr)
-	return iter.Iterator{
-		Next: func() (item interface{}, err error) {
-			d.lock()
-			defer d.unlock()
-			if l != nil {
-				item = C.GoString(C.udev_list_entry_get_name(l))
-				l = C.udev_list_entry_get_next(l)
-			} else {
-				err = iter.FINISHED
+
+	return func(yield func(string) bool) {
+		for l := C.udev_device_get_sysattr_list_entry(d.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
+			item := C.GoString(C.udev_list_entry_get_name(l))
+
+			if !yield(item) {
+				return
 			}
-			return
-		},
-		Close: func() {
-		},
+		}
 	}
 }
 

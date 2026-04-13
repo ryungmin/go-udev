@@ -1,3 +1,4 @@
+//go:build linux && cgo
 // +build linux,cgo
 
 package udev
@@ -13,8 +14,8 @@ import "C"
 
 import (
 	"errors"
-
-	"github.com/jkeiser/iter"
+	"fmt"
+	"iter"
 )
 
 // Enumerate is an opaque struct wrapping a udev enumerate object.
@@ -165,13 +166,14 @@ func (e *Enumerate) AddSyspath(syspath string) (err error) {
 func (e *Enumerate) DeviceSyspaths() (s []string, err error) {
 	e.lock()
 	defer e.unlock()
-	if C.udev_enumerate_scan_devices(e.ptr) < 0 {
+	n := C.udev_enumerate_scan_devices(e.ptr)
+	if n < 0 {
 		err = errors.New("udev: udev_enumerate_scan_devices failed")
-	} else {
-		s = make([]string, 0)
-		for l := C.udev_enumerate_get_list_entry(e.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
-			s = append(s, C.GoString(C.udev_list_entry_get_name(l)))
-		}
+		return
+	}
+	s = make([]string, 0, n)
+	for l := C.udev_enumerate_get_list_entry(e.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
+		s = append(s, C.GoString(C.udev_list_entry_get_name(l)))
 	}
 	return
 }
@@ -179,88 +181,74 @@ func (e *Enumerate) DeviceSyspaths() (s []string, err error) {
 // DeviceSyspathIterator returns an Iterator over the device syspaths matching the filter, sorted in dependency order.
 // The Iterator is using the github.com/jkeiser/iter package.
 // Values are returned as an interface{} and should be cast to string.
-func (e *Enumerate) DeviceSyspathIterator() (it iter.Iterator, err error) {
+func (e *Enumerate) DeviceSyspathIterator() (it iter.Seq[string], err error) {
 	e.lock()
 	defer e.unlock()
 	if C.udev_enumerate_scan_devices(e.ptr) < 0 {
-		err = errors.New("udev: udev_enumerate_scan_devices failed")
-	} else {
-		l := C.udev_enumerate_get_list_entry(e.ptr)
-		it = iter.Iterator{
-			Next: func() (item interface{}, err error) {
-				e.lock()
-				defer e.unlock()
-				if l != nil {
-					item = C.GoString(C.udev_list_entry_get_name(l))
-					l = C.udev_list_entry_get_next(l)
-				} else {
-					err = iter.FINISHED
-				}
-				return
-			},
-			Close: func() {
-			},
-		}
+		return nil, fmt.Errorf("udev: udev_enumerate_scan_devices failed")
 	}
-	return
+	return func(yield func(string) bool) {
+		for l := C.udev_enumerate_get_list_entry(e.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
+			item := C.GoString(C.udev_list_entry_get_name(l))
+
+			if !yield(item) {
+				return
+			}
+		}
+	}, nil
 }
 
 // SubsystemSyspaths retrieves a list of subsystem syspaths matching the filter, sorted in dependency order.
 func (e *Enumerate) SubsystemSyspaths() (s []string, err error) {
 	e.lock()
 	defer e.unlock()
-	if C.udev_enumerate_scan_subsystems(e.ptr) < 0 {
+	n := C.udev_enumerate_scan_subsystems(e.ptr)
+	if n < 0 {
 		err = errors.New("udev: udev_enumerate_scan_subsystems failed")
-	} else {
-		s = make([]string, 0)
-		for l := C.udev_enumerate_get_list_entry(e.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
-			s = append(s, C.GoString(C.udev_list_entry_get_name(l)))
-		}
+		return
 	}
+	s = make([]string, 0, n)
+	for l := C.udev_enumerate_get_list_entry(e.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
+		s = append(s, C.GoString(C.udev_list_entry_get_name(l)))
+	}
+
 	return
 }
 
 // DeviceSubsystemIterator returns an Iterator over the subsystem syspaths matching the filter, sorted in dependency order.
 // The Iterator is using the github.com/jkeiser/iter package.
 // Values are returned as an interface{} and should be cast to string.
-func (e *Enumerate) DeviceSubsystemIterator() (it iter.Iterator, err error) {
+func (e *Enumerate) DeviceSubsystemIterator() (it iter.Seq[string], err error) {
 	e.lock()
 	defer e.unlock()
 	if C.udev_enumerate_scan_subsystems(e.ptr) < 0 {
-		err = errors.New("udev: udev_enumerate_scan_devices failed")
-	} else {
-		l := C.udev_enumerate_get_list_entry(e.ptr)
-		it = iter.Iterator{
-			Next: func() (item interface{}, err error) {
-				e.lock()
-				defer e.unlock()
-				if l != nil {
-					item = C.GoString(C.udev_list_entry_get_name(l))
-					l = C.udev_list_entry_get_next(l)
-				} else {
-					err = iter.FINISHED
-				}
-				return
-			},
-			Close: func() {
-			},
-		}
+		return nil, fmt.Errorf("udev: udev_enumerate_scan_devices failed")
 	}
-	return
+
+	return func(yield func(string) bool) {
+		for l := C.udev_enumerate_get_list_entry(e.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
+			item := C.GoString(C.udev_list_entry_get_name(l))
+
+			if !yield(item) {
+				return
+			}
+		}
+	}, nil
 }
 
 // Devices retrieves a list of Devices matching the filter, sorted in dependency order.
 func (e *Enumerate) Devices() (m []*Device, err error) {
 	e.lock()
 	defer e.unlock()
-	if C.udev_enumerate_scan_devices(e.ptr) < 0 {
+	n := C.udev_enumerate_scan_devices(e.ptr)
+	if n < 0 {
 		err = errors.New("udev: udev_enumerate_scan_devices failed")
-	} else {
-		m = make([]*Device, 0)
-		for l := C.udev_enumerate_get_list_entry(e.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
-			s := C.udev_list_entry_get_name(l)
-			m = append(m, e.u.newDevice(C.udev_device_new_from_syspath(e.u.ptr, s)))
-		}
+		return
+	}
+	m = make([]*Device, 0, n)
+	for l := C.udev_enumerate_get_list_entry(e.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
+		s := C.udev_list_entry_get_name(l)
+		m = append(m, e.u.newDevice(C.udev_device_new_from_syspath(e.u.ptr, s)))
 	}
 	return
 }
@@ -268,29 +256,21 @@ func (e *Enumerate) Devices() (m []*Device, err error) {
 // DeviceIterator returns an Iterator over the Devices matching the filter, sorted in dependency order.
 // The Iterator is using the github.com/jkeiser/iter package.
 // Values are returned as an interface{} and should be cast to *Device.
-func (e *Enumerate) DeviceIterator() (it iter.Iterator, err error) {
+func (e *Enumerate) DeviceIterator() (it iter.Seq[*Device], err error) {
 	e.lock()
 	defer e.unlock()
 	if C.udev_enumerate_scan_devices(e.ptr) < 0 {
-		err = errors.New("udev: udev_enumerate_scan_devices failed")
-	} else {
-		l := C.udev_enumerate_get_list_entry(e.ptr)
-		it = iter.Iterator{
-			Next: func() (item interface{}, err error) {
-				e.lock()
-				defer e.unlock()
-				if l != nil {
-					s := C.udev_list_entry_get_name(l)
-					item = e.u.newDevice(C.udev_device_new_from_syspath(e.u.ptr, s))
-					l = C.udev_list_entry_get_next(l)
-				} else {
-					err = iter.FINISHED
-				}
-				return
-			},
-			Close: func() {
-			},
-		}
+		return nil, fmt.Errorf("udev: udev_enumerate_scan_devices failed")
 	}
-	return
+
+	return func(yield func(*Device) bool) {
+		for l := C.udev_enumerate_get_list_entry(e.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
+			s := C.udev_list_entry_get_name(l)
+			item := e.u.newDevice(C.udev_device_new_from_syspath(e.u.ptr, s))
+
+			if !yield(item) {
+				return
+			}
+		}
+	}, nil
 }

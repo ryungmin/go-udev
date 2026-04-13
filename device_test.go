@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package udev
@@ -28,11 +29,11 @@ func ExampleDevice() {
 	fmt.Printf("Driver:%v\n", d.Driver())
 
 	// Use one of the iterators
-	it := d.PropertyIterator()
-	it.Each(func(item interface{}) {
-		kv := item.([]string)
+	for item := range d.PropertyIterator() {
+		kv := item
 		_ = fmt.Sprintf("Property:%v=%v\n", kv[0], kv[1])
-	})
+	}
+
 	// Output:
 	// Sysname:zero
 	// Syspath:/sys/devices/virtual/mem/zero
@@ -79,10 +80,9 @@ func TestDeviceZero(t *testing.T) {
 	if len(sysattrs) == 0 {
 		t.Fail()
 	}
-	it := d.PropertyIterator()
-	it.Each(func(item interface{}) {
-		_ = item.([]string)
-	})
+	for item := range d.PropertyIterator() {
+		_ = item
+	}
 }
 
 func TestDeviceGC(t *testing.T) {
