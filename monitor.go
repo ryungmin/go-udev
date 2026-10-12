@@ -1,16 +1,7 @@
-//go:build linux && cgo
-// +build linux,cgo
+//go:build linux
 
 package udev
 
-/*
-  #cgo LDFLAGS: -ludev
-  #include <libudev.h>
-  #include <linux/types.h>
-  #include <stdlib.h>
-	#include <linux/kdev_t.h>
-*/
-import "C"
 import (
 	"context"
 	"errors"
@@ -22,7 +13,7 @@ import (
 
 // Monitor is an opaque object handling an event source
 type Monitor struct {
-	ptr *C.struct_udev_monitor
+	ptr uintptr
 	u   *Udev
 }
 
@@ -43,7 +34,7 @@ func (m *Monitor) unlock() {
 
 // Unref the monitor
 func monitorUnref(m *Monitor) {
-	C.udev_monitor_unref(m.ptr)
+	udev_monitor_unref(m.ptr)
 }
 
 // SetReceiveBufferSize sets the size of the kernel socket buffer.
@@ -51,7 +42,7 @@ func monitorUnref(m *Monitor) {
 func (m *Monitor) SetReceiveBufferSize(size int) (err error) {
 	m.lock()
 	defer m.unlock()
-	if C.udev_monitor_set_receive_buffer_size(m.ptr, (C.int)(size)) != 0 {
+	if udev_monitor_set_receive_buffer_size(m.ptr, int32(size)) != 0 {
 		err = errors.New("udev: udev_monitor_set_receive_buffer_size failed")
 	}
 	return
@@ -63,9 +54,7 @@ func (m *Monitor) SetReceiveBufferSize(size int) (err error) {
 func (m *Monitor) FilterAddMatchSubsystem(subsystem string) (err error) {
 	m.lock()
 	defer m.unlock()
-	s := C.CString(subsystem)
-	defer freeCharPtr(s)
-	if C.udev_monitor_filter_add_match_subsystem_devtype(m.ptr, s, nil) != 0 {
+	if udev_monitor_filter_add_match_subsystem_devtype(m.ptr, subsystem, nil) != 0 {
 		err = errors.New("udev: udev_monitor_filter_add_match_subsystem_devtype failed")
 	}
 	return
@@ -77,10 +66,11 @@ func (m *Monitor) FilterAddMatchSubsystem(subsystem string) (err error) {
 func (m *Monitor) FilterAddMatchSubsystemDevtype(subsystem, devtype string) (err error) {
 	m.lock()
 	defer m.unlock()
-	s, d := C.CString(subsystem), C.CString(devtype)
-	defer freeCharPtr(s)
-	defer freeCharPtr(d)
-	if C.udev_monitor_filter_add_match_subsystem_devtype(m.ptr, s, d) != 0 {
+	d, err := unix.BytePtrFromString(devtype)
+	if err != nil {
+		return err
+	}
+	if udev_monitor_filter_add_match_subsystem_devtype(m.ptr, subsystem, d) != 0 {
 		err = errors.New("udev: udev_monitor_filter_add_match_subsystem_devtype failed")
 	}
 	return
@@ -92,9 +82,7 @@ func (m *Monitor) FilterAddMatchSubsystemDevtype(subsystem, devtype string) (err
 func (m *Monitor) FilterAddMatchTag(tag string) (err error) {
 	m.lock()
 	defer m.unlock()
-	t := C.CString(tag)
-	defer freeCharPtr(t)
-	if C.udev_monitor_filter_add_match_tag(m.ptr, t) != 0 {
+	if udev_monitor_filter_add_match_tag(m.ptr, tag) != 0 {
 		err = errors.New("udev: udev_monitor_filter_add_match_tag failed")
 	}
 	return
@@ -105,7 +93,7 @@ func (m *Monitor) FilterAddMatchTag(tag string) (err error) {
 func (m *Monitor) FilterUpdate() (err error) {
 	m.lock()
 	defer m.unlock()
-	if C.udev_monitor_filter_update(m.ptr) != 0 {
+	if udev_monitor_filter_update(m.ptr) != 0 {
 		err = errors.New("udev: udev_monitor_filter_update failed")
 	}
 	return
@@ -115,7 +103,7 @@ func (m *Monitor) FilterUpdate() (err error) {
 func (m *Monitor) FilterRemove() (err error) {
 	m.lock()
 	defer m.unlock()
-	if C.udev_monitor_filter_remove(m.ptr) != 0 {
+	if udev_monitor_filter_remove(m.ptr) != 0 {
 		err = errors.New("udev: udev_monitor_filter_remove failed")
 	}
 	return
@@ -125,7 +113,7 @@ func (m *Monitor) FilterRemove() (err error) {
 func (m *Monitor) receiveDevice() (d *Device) {
 	m.lock()
 	defer m.unlock()
-	return m.u.newDevice(C.udev_monitor_receive_device(m.ptr))
+	return m.u.newDevice(udev_monitor_receive_device(m.ptr))
 }
 
 // DeviceChan binds the udev_monitor socket to the event source and spawns a
@@ -145,12 +133,12 @@ func (m *Monitor) DeviceChan(ctx context.Context) (<-chan *Device, <-chan error,
 	defer m.unlock()
 
 	// Enable receiving
-	if C.udev_monitor_enable_receiving(m.ptr) != 0 {
+	if udev_monitor_enable_receiving(m.ptr) != 0 {
 		return nil, nil, errors.New("udev: udev_monitor_enable_receiving failed")
 	}
 
 	// Set the fd to non-blocking
-	fd := C.udev_monitor_get_fd(m.ptr)
+	fd := udev_monitor_get_fd(m.ptr)
 	if e := unix.SetNonblock(int(fd), true); e != nil {
 		return nil, nil, errors.New("udev: unix.SetNonblock failed")
 	}
@@ -197,7 +185,7 @@ func (m *Monitor) DeviceChan(ctx context.Context) (<-chan *Device, <-chan error,
 			default:
 			}
 			// Process events
-			for ev := 0; ev < nevents; ev++ {
+			for ev := range nevents {
 				if events[ev].Fd == fd {
 					if (events[ev].Events & unix.EPOLLIN) != 0 {
 						for d := m.receiveDevice(); d != nil; d = m.receiveDevice() {

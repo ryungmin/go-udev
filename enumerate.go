@@ -1,16 +1,6 @@
-//go:build linux && cgo
-// +build linux,cgo
+//go:build linux
 
 package udev
-
-/*
-  #cgo LDFLAGS: -ludev
-  #include <libudev.h>
-  #include <linux/types.h>
-  #include <stdlib.h>
-	#include <linux/kdev_t.h>
-*/
-import "C"
 
 import (
 	"errors"
@@ -20,7 +10,7 @@ import (
 
 // Enumerate is an opaque struct wrapping a udev enumerate object.
 type Enumerate struct {
-	ptr *C.struct_udev_enumerate
+	ptr uintptr
 	u   *Udev
 }
 
@@ -36,16 +26,14 @@ func (e *Enumerate) unlock() {
 
 // Unref the Enumerate object
 func enumerateUnref(e *Enumerate) {
-	C.udev_enumerate_unref(e.ptr)
+	udev_enumerate_unref(e.ptr)
 }
 
 // AddMatchSubsystem adds a filter for a subsystem of the device to include in the list.
 func (e *Enumerate) AddMatchSubsystem(subsystem string) (err error) {
 	e.lock()
 	defer e.unlock()
-	s := C.CString(subsystem)
-	defer freeCharPtr(s)
-	if C.udev_enumerate_add_match_subsystem(e.ptr, s) != 0 {
+	if udev_enumerate_add_match_subsystem(e.ptr, subsystem) != 0 {
 		err = errors.New("udev: udev_enumerate_add_match_subsystem failed")
 	}
 	return
@@ -55,9 +43,7 @@ func (e *Enumerate) AddMatchSubsystem(subsystem string) (err error) {
 func (e *Enumerate) AddNomatchSubsystem(subsystem string) (err error) {
 	e.lock()
 	defer e.unlock()
-	s := C.CString(subsystem)
-	defer freeCharPtr(s)
-	if C.udev_enumerate_add_nomatch_subsystem(e.ptr, s) != 0 {
+	if udev_enumerate_add_nomatch_subsystem(e.ptr, subsystem) != 0 {
 		err = errors.New("udev: udev_enumerate_add_nomatch_subsystem failed")
 	}
 	return
@@ -67,10 +53,7 @@ func (e *Enumerate) AddNomatchSubsystem(subsystem string) (err error) {
 func (e *Enumerate) AddMatchSysattr(sysattr, value string) (err error) {
 	e.lock()
 	defer e.unlock()
-	s, v := C.CString(sysattr), C.CString(value)
-	defer freeCharPtr(s)
-	defer freeCharPtr(v)
-	if C.udev_enumerate_add_match_sysattr(e.ptr, s, v) != 0 {
+	if udev_enumerate_add_match_sysattr(e.ptr, sysattr, value) != 0 {
 		err = errors.New("udev: udev_enumerate_add_match_sysattr failed")
 	}
 	return
@@ -80,10 +63,7 @@ func (e *Enumerate) AddMatchSysattr(sysattr, value string) (err error) {
 func (e *Enumerate) AddNomatchSysattr(sysattr, value string) (err error) {
 	e.lock()
 	defer e.unlock()
-	s, v := C.CString(sysattr), C.CString(value)
-	defer freeCharPtr(s)
-	defer freeCharPtr(v)
-	if C.udev_enumerate_add_nomatch_sysattr(e.ptr, s, v) != 0 {
+	if udev_enumerate_add_nomatch_sysattr(e.ptr, sysattr, value) != 0 {
 		err = errors.New("udev: udev_enumerate_add_nomatch_sysattr failed")
 	}
 	return
@@ -93,10 +73,7 @@ func (e *Enumerate) AddNomatchSysattr(sysattr, value string) (err error) {
 func (e *Enumerate) AddMatchProperty(property, value string) (err error) {
 	e.lock()
 	defer e.unlock()
-	p, v := C.CString(property), C.CString(value)
-	defer freeCharPtr(p)
-	defer freeCharPtr(v)
-	if C.udev_enumerate_add_match_property(e.ptr, p, v) != 0 {
+	if udev_enumerate_add_match_property(e.ptr, property, value) != 0 {
 		err = errors.New("udev: udev_enumerate_add_match_property failed")
 	}
 	return
@@ -106,9 +83,7 @@ func (e *Enumerate) AddMatchProperty(property, value string) (err error) {
 func (e *Enumerate) AddMatchSysname(sysname string) (err error) {
 	e.lock()
 	defer e.unlock()
-	s := C.CString(sysname)
-	defer freeCharPtr(s)
-	if C.udev_enumerate_add_match_sysname(e.ptr, s) != 0 {
+	if udev_enumerate_add_match_sysname(e.ptr, sysname) != 0 {
 		err = errors.New("udev: udev_enumerate_add_match_sysname failed")
 	}
 	return
@@ -118,9 +93,7 @@ func (e *Enumerate) AddMatchSysname(sysname string) (err error) {
 func (e *Enumerate) AddMatchTag(tag string) (err error) {
 	e.lock()
 	defer e.unlock()
-	t := C.CString(tag)
-	defer freeCharPtr(t)
-	if C.udev_enumerate_add_match_tag(e.ptr, t) != 0 {
+	if udev_enumerate_add_match_tag(e.ptr, tag) != 0 {
 		err = errors.New("udev: udev_enumerate_add_match_tag failed")
 	}
 	return
@@ -130,7 +103,7 @@ func (e *Enumerate) AddMatchTag(tag string) (err error) {
 func (e *Enumerate) AddMatchParent(parent *Device) (err error) {
 	e.lock()
 	defer e.unlock()
-	if C.udev_enumerate_add_match_parent(e.ptr, parent.ptr) != 0 {
+	if udev_enumerate_add_match_parent(e.ptr, parent.ptr) != 0 {
 		err = errors.New("udev: udev_enumerate_add_match_parent failed")
 	}
 	return
@@ -144,7 +117,7 @@ func (e *Enumerate) AddMatchParent(parent *Device) (err error) {
 func (e *Enumerate) AddMatchIsInitialized() (err error) {
 	e.lock()
 	defer e.unlock()
-	if C.udev_enumerate_add_match_is_initialized(e.ptr) != 0 {
+	if udev_enumerate_add_match_is_initialized(e.ptr) != 0 {
 		err = errors.New("udev: udev_enumerate_add_match_is_initialized failed")
 	}
 	return
@@ -154,9 +127,7 @@ func (e *Enumerate) AddMatchIsInitialized() (err error) {
 func (e *Enumerate) AddSyspath(syspath string) (err error) {
 	e.lock()
 	defer e.unlock()
-	s := C.CString(syspath)
-	defer freeCharPtr(s)
-	if C.udev_enumerate_add_syspath(e.ptr, s) != 0 {
+	if udev_enumerate_add_syspath(e.ptr, syspath) != 0 {
 		err = errors.New("udev: udev_enumerate_add_syspath failed")
 	}
 	return
@@ -166,14 +137,14 @@ func (e *Enumerate) AddSyspath(syspath string) (err error) {
 func (e *Enumerate) DeviceSyspaths() (s []string, err error) {
 	e.lock()
 	defer e.unlock()
-	n := C.udev_enumerate_scan_devices(e.ptr)
+	n := udev_enumerate_scan_devices(e.ptr)
 	if n < 0 {
 		err = errors.New("udev: udev_enumerate_scan_devices failed")
 		return
 	}
 	s = make([]string, 0, n)
-	for l := C.udev_enumerate_get_list_entry(e.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
-		s = append(s, C.GoString(C.udev_list_entry_get_name(l)))
+	for l := udev_enumerate_get_list_entry(e.ptr); l != 0; l = udev_list_entry_get_next(l) {
+		s = append(s, udev_list_entry_get_name(l))
 	}
 	return
 }
@@ -184,12 +155,12 @@ func (e *Enumerate) DeviceSyspaths() (s []string, err error) {
 func (e *Enumerate) DeviceSyspathIterator() (it iter.Seq[string], err error) {
 	e.lock()
 	defer e.unlock()
-	if C.udev_enumerate_scan_devices(e.ptr) < 0 {
+	if udev_enumerate_scan_devices(e.ptr) < 0 {
 		return nil, fmt.Errorf("udev: udev_enumerate_scan_devices failed")
 	}
 	return func(yield func(string) bool) {
-		for l := C.udev_enumerate_get_list_entry(e.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
-			item := C.GoString(C.udev_list_entry_get_name(l))
+		for l := udev_enumerate_get_list_entry(e.ptr); l != 0; l = udev_list_entry_get_next(l) {
+			item := udev_list_entry_get_name(l)
 
 			if !yield(item) {
 				return
@@ -202,14 +173,14 @@ func (e *Enumerate) DeviceSyspathIterator() (it iter.Seq[string], err error) {
 func (e *Enumerate) SubsystemSyspaths() (s []string, err error) {
 	e.lock()
 	defer e.unlock()
-	n := C.udev_enumerate_scan_subsystems(e.ptr)
+	n := udev_enumerate_scan_subsystems(e.ptr)
 	if n < 0 {
 		err = errors.New("udev: udev_enumerate_scan_subsystems failed")
 		return
 	}
 	s = make([]string, 0, n)
-	for l := C.udev_enumerate_get_list_entry(e.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
-		s = append(s, C.GoString(C.udev_list_entry_get_name(l)))
+	for l := udev_enumerate_get_list_entry(e.ptr); l != 0; l = udev_list_entry_get_next(l) {
+		s = append(s, udev_list_entry_get_name(l))
 	}
 
 	return
@@ -221,13 +192,13 @@ func (e *Enumerate) SubsystemSyspaths() (s []string, err error) {
 func (e *Enumerate) DeviceSubsystemIterator() (it iter.Seq[string], err error) {
 	e.lock()
 	defer e.unlock()
-	if C.udev_enumerate_scan_subsystems(e.ptr) < 0 {
+	if udev_enumerate_scan_subsystems(e.ptr) < 0 {
 		return nil, fmt.Errorf("udev: udev_enumerate_scan_devices failed")
 	}
 
 	return func(yield func(string) bool) {
-		for l := C.udev_enumerate_get_list_entry(e.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
-			item := C.GoString(C.udev_list_entry_get_name(l))
+		for l := udev_enumerate_get_list_entry(e.ptr); l != 0; l = udev_list_entry_get_next(l) {
+			item := udev_list_entry_get_name(l)
 
 			if !yield(item) {
 				return
@@ -240,15 +211,15 @@ func (e *Enumerate) DeviceSubsystemIterator() (it iter.Seq[string], err error) {
 func (e *Enumerate) Devices() (m []*Device, err error) {
 	e.lock()
 	defer e.unlock()
-	n := C.udev_enumerate_scan_devices(e.ptr)
+	n := udev_enumerate_scan_devices(e.ptr)
 	if n < 0 {
 		err = errors.New("udev: udev_enumerate_scan_devices failed")
 		return
 	}
 	m = make([]*Device, 0, n)
-	for l := C.udev_enumerate_get_list_entry(e.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
-		s := C.udev_list_entry_get_name(l)
-		m = append(m, e.u.newDevice(C.udev_device_new_from_syspath(e.u.ptr, s)))
+	for l := udev_enumerate_get_list_entry(e.ptr); l != 0; l = udev_list_entry_get_next(l) {
+		s := udev_list_entry_get_name(l)
+		m = append(m, e.u.newDevice(udev_device_new_from_syspath(e.u.ptr, s)))
 	}
 	return
 }
@@ -259,14 +230,14 @@ func (e *Enumerate) Devices() (m []*Device, err error) {
 func (e *Enumerate) DeviceIterator() (it iter.Seq[*Device], err error) {
 	e.lock()
 	defer e.unlock()
-	if C.udev_enumerate_scan_devices(e.ptr) < 0 {
+	if udev_enumerate_scan_devices(e.ptr) < 0 {
 		return nil, fmt.Errorf("udev: udev_enumerate_scan_devices failed")
 	}
 
 	return func(yield func(*Device) bool) {
-		for l := C.udev_enumerate_get_list_entry(e.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
-			s := C.udev_list_entry_get_name(l)
-			item := e.u.newDevice(C.udev_device_new_from_syspath(e.u.ptr, s))
+		for l := udev_enumerate_get_list_entry(e.ptr); l != 0; l = udev_list_entry_get_next(l) {
+			s := udev_list_entry_get_name(l)
+			item := e.u.newDevice(udev_device_new_from_syspath(e.u.ptr, s))
 
 			if !yield(item) {
 				return

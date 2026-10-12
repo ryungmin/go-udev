@@ -1,16 +1,7 @@
-//go:build linux && cgo
-// +build linux,cgo
+//go:build linux
 
 package udev
 
-/*
-  #cgo LDFLAGS: -ludev
-  #include <libudev.h>
-  #include <linux/types.h>
-  #include <stdlib.h>
-	#include <linux/kdev_t.h>
-*/
-import "C"
 import (
 	"errors"
 	"iter"
@@ -18,7 +9,7 @@ import (
 
 // Device wraps a libudev device object
 type Device struct {
-	ptr *C.struct_udev_device
+	ptr uintptr
 	u   *Udev
 }
 
@@ -33,16 +24,16 @@ func (d *Device) unlock() {
 }
 
 func deviceUnref(d *Device) {
-	C.udev_device_unref(d.ptr)
+	udev_device_unref(d.ptr)
 }
 
 // Parent returns the parent Device, or nil if the receiver has no parent Device
 func (d *Device) Parent() *Device {
 	d.lock()
 	defer d.unlock()
-	ptr := C.udev_device_get_parent(d.ptr)
-	if ptr != nil {
-		C.udev_device_ref(ptr)
+	ptr := udev_device_get_parent(d.ptr)
+	if ptr != 0 {
+		udev_device_ref(ptr)
 	}
 	return d.u.newDevice(ptr)
 }
@@ -52,12 +43,9 @@ func (d *Device) Parent() *Device {
 func (d *Device) ParentWithSubsystemDevtype(subsystem, devtype string) *Device {
 	d.lock()
 	defer d.unlock()
-	ss, dt := C.CString(subsystem), C.CString(devtype)
-	defer freeCharPtr(ss)
-	defer freeCharPtr(dt)
-	ptr := C.udev_device_get_parent_with_subsystem_devtype(d.ptr, ss, dt)
-	if ptr != nil {
-		C.udev_device_ref(ptr)
+	ptr := udev_device_get_parent_with_subsystem_devtype(d.ptr, subsystem, devtype)
+	if ptr != 0 {
+		udev_device_ref(ptr)
 	}
 	return d.u.newDevice(ptr)
 }
@@ -67,7 +55,7 @@ func (d *Device) ParentWithSubsystemDevtype(subsystem, devtype string) *Device {
 func (d *Device) Devpath() string {
 	d.lock()
 	defer d.unlock()
-	return C.GoString(C.udev_device_get_devpath(d.ptr))
+	return udev_device_get_devpath(d.ptr)
 }
 
 // Subsystem returns the subsystem string of the udev device.
@@ -75,21 +63,21 @@ func (d *Device) Devpath() string {
 func (d *Device) Subsystem() string {
 	d.lock()
 	defer d.unlock()
-	return C.GoString(C.udev_device_get_subsystem(d.ptr))
+	return udev_device_get_subsystem(d.ptr)
 }
 
 // Devtype returns the devtype string of the udev device.
 func (d *Device) Devtype() string {
 	d.lock()
 	defer d.unlock()
-	return C.GoString(C.udev_device_get_devtype(d.ptr))
+	return udev_device_get_devtype(d.ptr)
 }
 
 // Sysname returns the sysname of the udev device (e.g. ttyS3, sda1...).
 func (d *Device) Sysname() string {
 	d.lock()
 	defer d.unlock()
-	return C.GoString(C.udev_device_get_sysname(d.ptr))
+	return udev_device_get_sysname(d.ptr)
 }
 
 // Syspath returns the sys path of the udev device.
@@ -97,14 +85,14 @@ func (d *Device) Sysname() string {
 func (d *Device) Syspath() string {
 	d.lock()
 	defer d.unlock()
-	return C.GoString(C.udev_device_get_syspath(d.ptr))
+	return udev_device_get_syspath(d.ptr)
 }
 
 // Sysnum returns the trailing number of of the device name
 func (d *Device) Sysnum() string {
 	d.lock()
 	defer d.unlock()
-	return C.GoString(C.udev_device_get_sysnum(d.ptr))
+	return udev_device_get_sysnum(d.ptr)
 }
 
 // Devnode returns the device node file name belonging to the udev device.
@@ -112,7 +100,7 @@ func (d *Device) Sysnum() string {
 func (d *Device) Devnode() string {
 	d.lock()
 	defer d.unlock()
-	return C.GoString(C.udev_device_get_devnode(d.ptr))
+	return udev_device_get_devnode(d.ptr)
 }
 
 // IsInitialized checks if udev has already handled the device and has set up
@@ -123,7 +111,7 @@ func (d *Device) Devnode() string {
 func (d *Device) IsInitialized() bool {
 	d.lock()
 	defer d.unlock()
-	return C.udev_device_get_is_initialized(d.ptr) != 0
+	return udev_device_get_is_initialized(d.ptr) != 0
 }
 
 // Devlinks retrieves the map of device links pointing to the device file of the udev device.
@@ -132,8 +120,8 @@ func (d *Device) Devlinks() (r map[string]struct{}) {
 	d.lock()
 	defer d.unlock()
 	r = make(map[string]struct{})
-	for l := C.udev_device_get_devlinks_list_entry(d.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
-		r[C.GoString(C.udev_list_entry_get_name(l))] = struct{}{}
+	for l := udev_device_get_devlinks_list_entry(d.ptr); l != 0; l = udev_list_entry_get_next(l) {
+		r[udev_list_entry_get_name(l)] = struct{}{}
 	}
 	return
 }
@@ -146,8 +134,8 @@ func (d *Device) DevlinkIterator() iter.Seq[string] {
 	defer d.unlock()
 
 	return func(yield func(string) bool) {
-		for l := C.udev_device_get_devlinks_list_entry(d.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
-			var item string = C.GoString(C.udev_list_entry_get_name(l))
+		for l := udev_device_get_devlinks_list_entry(d.ptr); l != 0; l = udev_list_entry_get_next(l) {
+			var item string = udev_list_entry_get_name(l)
 
 			if !yield(item) {
 				return
@@ -161,8 +149,8 @@ func (d *Device) Properties() (r map[string]string) {
 	d.lock()
 	defer d.unlock()
 	r = make(map[string]string)
-	for l := C.udev_device_get_properties_list_entry(d.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
-		r[C.GoString(C.udev_list_entry_get_name(l))] = C.GoString(C.udev_list_entry_get_value(l))
+	for l := udev_device_get_properties_list_entry(d.ptr); l != 0; l = udev_list_entry_get_next(l) {
+		r[udev_list_entry_get_name(l)] = udev_list_entry_get_value(l)
 	}
 	return
 }
@@ -176,10 +164,10 @@ func (d *Device) PropertyIterator() iter.Seq[[]string] {
 	defer d.unlock()
 
 	return func(yield func([]string) bool) {
-		for l := C.udev_device_get_properties_list_entry(d.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
+		for l := udev_device_get_properties_list_entry(d.ptr); l != 0; l = udev_list_entry_get_next(l) {
 			item := []string{
-				C.GoString(C.udev_list_entry_get_name(l)),
-				C.GoString(C.udev_list_entry_get_value(l)),
+				udev_list_entry_get_name(l),
+				udev_list_entry_get_value(l),
 			}
 			if !yield(item) {
 				return
@@ -193,8 +181,8 @@ func (d *Device) Tags() (r map[string]struct{}) {
 	d.lock()
 	defer d.unlock()
 	r = make(map[string]struct{})
-	for l := C.udev_device_get_tags_list_entry(d.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
-		r[C.GoString(C.udev_list_entry_get_name(l))] = struct{}{}
+	for l := udev_device_get_tags_list_entry(d.ptr); l != 0; l = udev_list_entry_get_next(l) {
+		r[udev_list_entry_get_name(l)] = struct{}{}
 	}
 	return
 }
@@ -207,8 +195,8 @@ func (d *Device) TagIterator() iter.Seq[string] {
 	defer d.unlock()
 
 	return func(yield func(string) bool) {
-		for l := C.udev_device_get_tags_list_entry(d.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
-			item := C.GoString(C.udev_list_entry_get_name(l))
+		for l := udev_device_get_tags_list_entry(d.ptr); l != 0; l = udev_list_entry_get_next(l) {
+			item := udev_list_entry_get_name(l)
 
 			if !yield(item) {
 				return
@@ -222,8 +210,8 @@ func (d *Device) Sysattrs() (r map[string]struct{}) {
 	d.lock()
 	defer d.unlock()
 	r = make(map[string]struct{})
-	for l := C.udev_device_get_sysattr_list_entry(d.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
-		r[C.GoString(C.udev_list_entry_get_name(l))] = struct{}{}
+	for l := udev_device_get_sysattr_list_entry(d.ptr); l != 0; l = udev_list_entry_get_next(l) {
+		r[udev_list_entry_get_name(l)] = struct{}{}
 	}
 	return
 }
@@ -236,8 +224,8 @@ func (d *Device) SysattrIterator() iter.Seq[string] {
 	defer d.unlock()
 
 	return func(yield func(string) bool) {
-		for l := C.udev_device_get_sysattr_list_entry(d.ptr); l != nil; l = C.udev_list_entry_get_next(l) {
-			item := C.GoString(C.udev_list_entry_get_name(l))
+		for l := udev_device_get_sysattr_list_entry(d.ptr); l != 0; l = udev_list_entry_get_next(l) {
+			item := udev_list_entry_get_name(l)
 
 			if !yield(item) {
 				return
@@ -250,23 +238,21 @@ func (d *Device) SysattrIterator() iter.Seq[string] {
 func (d *Device) PropertyValue(key string) string {
 	d.lock()
 	defer d.unlock()
-	k := C.CString(key)
-	defer freeCharPtr(k)
-	return C.GoString(C.udev_device_get_property_value(d.ptr, k))
+	return udev_device_get_property_value(d.ptr, key)
 }
 
 // Driver returns the driver for the receiver
 func (d *Device) Driver() string {
 	d.lock()
 	defer d.unlock()
-	return C.GoString(C.udev_device_get_driver(d.ptr))
+	return udev_device_get_driver(d.ptr)
 }
 
 // Devnum returns the device major/minor number.
 func (d *Device) Devnum() Devnum {
 	d.lock()
 	defer d.unlock()
-	return Devnum{C.udev_device_get_devnum(d.ptr)}
+	return Devnum{udev_device_get_devnum(d.ptr)}
 }
 
 // Action returns the action for the event.
@@ -276,7 +262,7 @@ func (d *Device) Devnum() Devnum {
 func (d *Device) Action() string {
 	d.lock()
 	defer d.unlock()
-	return C.GoString(C.udev_device_get_action(d.ptr))
+	return udev_device_get_action(d.ptr)
 }
 
 // Seqnum returns the sequence number of the event.
@@ -285,7 +271,7 @@ func (d *Device) Action() string {
 func (d *Device) Seqnum() uint64 {
 	d.lock()
 	defer d.unlock()
-	return uint64(C.udev_device_get_seqnum(d.ptr))
+	return udev_device_get_seqnum(d.ptr)
 }
 
 // UsecSinceInitialized returns the number of microseconds passed since udev set up the device for the first time.
@@ -294,7 +280,7 @@ func (d *Device) Seqnum() uint64 {
 func (d *Device) UsecSinceInitialized() uint64 {
 	d.lock()
 	defer d.unlock()
-	return uint64(C.udev_device_get_usec_since_initialized(d.ptr))
+	return udev_device_get_usec_since_initialized(d.ptr)
 }
 
 // SysattrValue retrieves the content of a sys attribute file, and returns an empty string if there is no sys attribute value.
@@ -303,19 +289,14 @@ func (d *Device) UsecSinceInitialized() uint64 {
 func (d *Device) SysattrValue(sysattr string) string {
 	d.lock()
 	defer d.unlock()
-	s := C.CString(sysattr)
-	defer freeCharPtr(s)
-	return C.GoString(C.udev_device_get_sysattr_value(d.ptr, s))
+	return udev_device_get_sysattr_value(d.ptr, sysattr)
 }
 
 // SetSysattrValue sets the content of a sys attribute file, and returns an error if this fails.
 func (d *Device) SetSysattrValue(sysattr, value string) (err error) {
 	d.lock()
 	defer d.unlock()
-	sa, val := C.CString(sysattr), C.CString(value)
-	defer freeCharPtr(sa)
-	defer freeCharPtr(val)
-	if C.udev_device_set_sysattr_value(d.ptr, sa, val) < 0 {
+	if udev_device_set_sysattr_value(d.ptr, sysattr, value) < 0 {
 		err = errors.New("udev: udev_device_set_sysattr_value failed")
 	}
 	return
@@ -325,7 +306,5 @@ func (d *Device) SetSysattrValue(sysattr, value string) (err error) {
 func (d *Device) HasTag(tag string) bool {
 	d.lock()
 	defer d.unlock()
-	t := C.CString(tag)
-	defer freeCharPtr(t)
-	return C.udev_device_has_tag(d.ptr, t) != 0
+	return udev_device_has_tag(d.ptr, tag) != 0
 }

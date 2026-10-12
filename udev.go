@@ -1,16 +1,9 @@
-// +build linux,cgo
+//go:build linux
 
-// Package udev provides a cgo wrapper around the libudev C library
+// Package udev provides a wrapper around the libudev C library.
+// libudev is loaded at runtime with purego, so cgo is not required.
 package udev
 
-/*
-  #cgo LDFLAGS: -ludev
-  #include <libudev.h>
-  #include <linux/types.h>
-  #include <stdlib.h>
-	#include <linux/kdev_t.h>
-*/
-import "C"
 import (
 	"runtime"
 	"sync"
@@ -18,22 +11,27 @@ import (
 
 // Udev is an opaque struct wraping a udev library context
 type Udev struct {
-	// A pointer to the C struct udev context
-	ptr *C.struct_udev
+	// A pointer to the C struct udev context (0 if libudev could not be loaded)
+	ptr uintptr
 	// Mutex for thread sync as libudev is not thread safe when called with the same struct udev
 	m    sync.Mutex
 	once sync.Once
 }
 
 func udevUnref(u *Udev) {
-	C.udev_unref(u.ptr)
+	udev_unref(u.ptr)
 }
 
 // Lock locks a udev context
 func (u *Udev) lock() {
 	u.once.Do(func() {
-		u.ptr = C.udev_new()
-		runtime.SetFinalizer(u, udevUnref)
+		if loadLib() != nil {
+			return
+		}
+		u.ptr = udev_new()
+		if u.ptr != 0 {
+			runtime.SetFinalizer(u, udevUnref)
+		}
 	})
 	u.m.Lock()
 }
@@ -47,9 +45,9 @@ func (u *Udev) unlock() {
 // The device is also added t the devices map in the udev context.
 // The agrument ptr is a pointer to the underlying C udev_device structure.
 // The function returns nil if the pointer passed is NULL.
-func (u *Udev) newDevice(ptr *C.struct_udev_device) (d *Device) {
+func (u *Udev) newDevice(ptr uintptr) (d *Device) {
 	// If passed a NULL pointer, return nil
-	if ptr == nil {
+	if ptr == 0 {
 		return nil
 	}
 	// Create a new device object
@@ -66,9 +64,9 @@ func (u *Udev) newDevice(ptr *C.struct_udev_device) (d *Device) {
 // The monitor is also added t the monitors map in the udev context.
 // The agrument ptr is a pointer to the underlying C udev_monitor structure.
 // The function returns nil if the pointer passed is NULL.
-func (u *Udev) newMonitor(ptr *C.struct_udev_monitor) (m *Monitor) {
+func (u *Udev) newMonitor(ptr uintptr) (m *Monitor) {
 	// If passed a NULL pointer, return nil
-	if ptr == nil {
+	if ptr == 0 {
 		return nil
 	}
 	// Create a new device object
@@ -81,9 +79,9 @@ func (u *Udev) newMonitor(ptr *C.struct_udev_monitor) (m *Monitor) {
 	return
 }
 
-func (u *Udev) newEnumerate(ptr *C.struct_udev_enumerate) (e *Enumerate) {
+func (u *Udev) newEnumerate(ptr uintptr) (e *Enumerate) {
 	// If passed a NULL pointer, return nil
-	if ptr == nil {
+	if ptr == 0 {
 		return nil
 	}
 	// Create a new device object
@@ -102,11 +100,11 @@ func (u *Udev) NewDeviceFromSyspath(syspath string) *Device {
 	// Lock the udev context
 	u.lock()
 	defer u.unlock()
-	// Convert Go strings to C strings for passing
-	s := C.CString(syspath)
-	defer freeCharPtr(s)
+	if u.ptr == 0 {
+		return nil
+	}
 	// Return a new device
-	return u.newDevice(C.udev_device_new_from_syspath(u.ptr, s))
+	return u.newDevice(udev_device_new_from_syspath(u.ptr, syspath))
 }
 
 // NewDeviceFromDevnum returns a pointer to a new device identified by its Devnum, and nil on error
@@ -114,33 +112,40 @@ func (u *Udev) NewDeviceFromSyspath(syspath string) *Device {
 func (u *Udev) NewDeviceFromDevnum(deviceType uint8, n Devnum) *Device {
 	u.lock()
 	defer u.unlock()
-	return u.newDevice(C.udev_device_new_from_devnum(u.ptr, C.char(deviceType), n.d))
+	if u.ptr == 0 {
+		return nil
+	}
+	return u.newDevice(udev_device_new_from_devnum(u.ptr, deviceType, n.d))
 }
 
 // NewDeviceFromSubsystemSysname returns a pointer to a new device identified by its subystem and sysname, and nil on error
 func (u *Udev) NewDeviceFromSubsystemSysname(subsystem, sysname string) *Device {
 	u.lock()
 	defer u.unlock()
-	ss, sn := C.CString(subsystem), C.CString(sysname)
-	defer freeCharPtr(ss)
-	defer freeCharPtr(sn)
-	return u.newDevice(C.udev_device_new_from_subsystem_sysname(u.ptr, ss, sn))
+	if u.ptr == 0 {
+		return nil
+	}
+	return u.newDevice(udev_device_new_from_subsystem_sysname(u.ptr, subsystem, sysname))
 }
 
 // NewDeviceFromDeviceID returns a pointer to a new device identified by its device id, and nil on error
 func (u *Udev) NewDeviceFromDeviceID(id string) *Device {
 	u.lock()
 	defer u.unlock()
-	i := C.CString(id)
-	defer freeCharPtr(i)
-	return u.newDevice(C.udev_device_new_from_device_id(u.ptr, i))
+	if u.ptr == 0 {
+		return nil
+	}
+	return u.newDevice(udev_device_new_from_device_id(u.ptr, id))
 }
 
 // NewEnumerate returns a pointer to a new enumerate, and nil on error
 func (u *Udev) NewEnumerate() *Enumerate {
 	u.lock()
 	defer u.unlock()
-	return u.newEnumerate(C.udev_enumerate_new(u.ptr))
+	if u.ptr == 0 {
+		return nil
+	}
+	return u.newEnumerate(udev_enumerate_new(u.ptr))
 }
 
 // NewMonitorFromNetlink returns a pointer to a new monitor listening to a NetLink socket, and nil on error
@@ -151,18 +156,8 @@ func (u *Udev) NewEnumerate() *Enumerate {
 func (u *Udev) NewMonitorFromNetlink(name string) *Monitor {
 	u.lock()
 	defer u.unlock()
-	n := C.CString(name)
-	defer freeCharPtr(n)
-	return u.newMonitor(C.udev_monitor_new_from_netlink(u.ptr, n))
+	if u.ptr == 0 {
+		return nil
+	}
+	return u.newMonitor(udev_monitor_new_from_netlink(u.ptr, name))
 }
-
-/*
-// NewMonitorFromSocket returns a pointer to a new monitor listening to the specified socket, and nil on error
-func (u *Udev) NewMonitorFromSocket(socketPath string) *Monitor {
-	u.lock()
-	defer u.unlock()
-	s := C.CString(socketPath)
-	defer freeCharPtr(s)
-	return u.newMonitor(C.udev_monitor_new_from_socket(u.ptr, s))
-}
-*/
