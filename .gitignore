@@ -22,3 +22,6 @@ _testmain.go
 *.exe
 *.test
 *.prof
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
